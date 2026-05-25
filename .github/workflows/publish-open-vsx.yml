@@ -23,7 +23,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+
+      - name: Check OVSX_TOKEN is set
+        run: |
+          if [ -z "$OVSX_TOKEN" ]; then
+            echo "Error: OVSX_TOKEN secret is not set" >&2
+            exit 1
+          fi
+        env:
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
 
       - name: Determine tag name
         id: tag
@@ -36,42 +45,46 @@ jobs:
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tagName }}" ]; then
             TAG="${{ inputs.tagName }}"
           else
-            echo "This workflow must run for a release, a tag push, or provide 'tagName' input." >&2
+            echo "Error: This workflow must run for a release, a tag push, or provide 'tagName' input." >&2
             exit 1
           fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "gh_tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Validate tag matches package.json version
-        run: |
-          set -e
-          TAG_REF="${{ steps.tag.outputs.tag }}"
-          TAG="${TAG_REF#v}"
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          echo "Release tag: ${TAG_REF}"
-          echo "Package version: ${PKG_VERSION}"
-          if [ "$TAG" != "$PKG_VERSION" ]; then
-            echo "Tag ($TAG_REF) does not match package.json version ($PKG_VERSION)" >&2
-            exit 1
-          fi
+        run: node .github/workflows/scripts/validate-version.js
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Compile extension
-        run: npm run compile
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Get commit timestamp for tag
+        id: get_epoch
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct ${{ steps.tag.outputs.gh_tag }})" >> "$GITHUB_ENV"
 
       - name: Package VSIX
-        run: npm run vsce:package
+        run: |
+          echo "SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-<not set>}"
+          npm run vsce:package
+
+      - name: Find VSIX and generate SHA256
+        id: vsix
+        run: |
+          VSIX_FILE=$(ls *.vsix | head -n1)
+          if [ -z "$VSIX_FILE" ]; then
+            echo "Error: No VSIX file found after packaging" >&2
+            ls -la >&2
+            exit 1
+          fi
+          VSIX_SHA=$(sha256sum "$VSIX_FILE" | tee "$VSIX_FILE.sha256" | awk '{print $1}')
+          echo "vsix_file=$VSIX_FILE" >> "$GITHUB_OUTPUT"
+          echo "vsix_sha256=$VSIX_FILE.sha256" >> "$GITHUB_OUTPUT"
+          echo "Found VSIX: $VSIX_FILE (sha256: $VSIX_SHA)"
 
       - name: Publish to Open VSX
         env:
           OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
         run: |
           set -e
-          VSIX=$(find . -maxdepth 1 -name "*.vsix" -print -quit)
-          if [ -z "$VSIX" ]; then
-            echo "No VSIX found in repository root after packaging" >&2
-            ls -la
-            exit 1
-          fi
-          npx ovsx publish -p "$OVSX_TOKEN" --packagePath "$VSIX"
+          npx ovsx publish -p "$OVSX_TOKEN" --packagePath "${{ steps.vsix.outputs.vsix_file }}"
