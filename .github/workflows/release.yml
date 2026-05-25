@@ -1,17 +1,24 @@
-name: Release VSIX
+name: Build release VSIX package
 
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
-permissions:
-  contents: write
+env:
+  TZ: UTC
 
 jobs:
-  release:
+  build-release:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    outputs:
+      vsix_file:   ${{ steps.vsix.outputs.vsix_file }}
+      vsix_sha256: ${{ steps.vsix.outputs.vsix_sha256 }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,7 +40,9 @@ jobs:
 
       - name: Get commit timestamp for tag
         id: get_epoch
-        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct ${{ github.ref_name }})" >> "$GITHUB_ENV"
+        env:
+          GH_TAG: ${{ github.ref_name }}
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct "$GH_TAG")" >> "$GITHUB_ENV"
 
       - name: Package VSIX
         run: |
@@ -43,6 +52,7 @@ jobs:
       - name: Find VSIX and generate SHA256
         id: vsix
         run: |
+          set -e
           VSIX_FILE=$(ls *.vsix | head -n1)
           if [ -z "$VSIX_FILE" ]; then
             echo "Error: No VSIX file found after packaging" >&2
@@ -54,13 +64,50 @@ jobs:
           echo "vsix_sha256=$VSIX_FILE.sha256" >> "$GITHUB_OUTPUT"
           echo "Found VSIX: $VSIX_FILE (sha256: $VSIX_SHA)"
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: |
+            *.vsix
+            *.vsix.sha256
+
+  publish-release:
+    needs: build-release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: vsix
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
           files: |
-            ${{ steps.vsix.outputs.vsix_file }}
-            ${{ steps.vsix.outputs.vsix_sha256 }}
+            ${{ needs.build-release.outputs.vsix_file }}
+            ${{ needs.build-release.outputs.vsix_sha256 }}
           generate_release_notes: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Publish to Open VSX
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$OVSX_TOKEN" ]; then
+            echo "::warning::Skipping Open VSX publish: OVSX_TOKEN secret is not set"
+            exit 0
+          fi
+          npx ovsx publish -p "$OVSX_TOKEN" --packagePath "${{ needs.build-release.outputs.vsix_file }}"
