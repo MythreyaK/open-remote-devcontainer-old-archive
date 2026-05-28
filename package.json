@@ -2,13 +2,14 @@
   "name": "open-remote-devcontainer",
   "displayName": "Open Remote - Devcontainer",
   "description": "Build & run a devcontainer using Docker or Podman CLI",
-  "version": "0.3.3",
+  "version": "0.5.0",
   "publisher": "mythreyak",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/mythreyak/open-remote-devcontainer.git"
   },
+	"icon": "assets/icon.png",
   "homepage": "https://github.com/mythreyak/open-remote-devcontainer#readme",
   "bugs": {
     "url": "https://github.com/mythreyak/open-remote-devcontainer/issues"
@@ -31,16 +32,8 @@
     "workspace"
   ],
   "activationEvents": [
-    "onStartupFinished",
     "workspaceContains:.devcontainer/devcontainer.json",
-    "onResolveRemoteAuthority:devcontainer",
-    "onCommand:openremotedevcontainer.addDockerfileTemplate",
-    "onCommand:openremotedevcontainer.openFolderInDevcontainer",
-    "onCommand:openremotedevcontainer.showMenu",
-    "onCommand:openremotedevcontainer.openDevcontainerConfig",
-    "onCommand:openremotedevcontainer.rebuildAndOpen",
-    "onCommand:openremotedevcontainer.showLog",
-    "onCommand:openremotedevcontainer.reopenLocally"
+    "onResolveRemoteAuthority:devcontainer"
   ],
   "contributes": {
     "commands": [
@@ -65,6 +58,10 @@
         "title": "Devcontainer: Rebuild & repen in container"
       },
       {
+        "command": "openremotedevcontainer.rebuildNoCacheAndOpen",
+        "title": "Devcontainer: Rebuild without cache & reopen in container"
+      },
+      {
         "command": "openremotedevcontainer.showLog",
         "title": "Devcontainer: Show Log"
       },
@@ -86,6 +83,9 @@
         },
         {
           "command": "openremotedevcontainer.rebuildAndOpen"
+        },
+        {
+          "command": "openremotedevcontainer.rebuildNoCacheAndOpen"
         },
         {
           "command": "openremotedevcontainer.showLog"
@@ -124,12 +124,27 @@
           "when": "!remoteName && openremotedevcontainer.hasConfig"
         },
         {
+          "command": "openremotedevcontainer.rebuildNoCacheAndOpen",
+          "group": "remote_30_devcontainer_3local@4",
+          "when": "!remoteName && openremotedevcontainer.hasConfig"
+        },
+        {
           "command": "openremotedevcontainer.showLog",
-          "group": "remote_30_devcontainer_3local@4"
+          "group": "remote_30_devcontainer_3local@5"
+        },
+        {
+          "command": "openremotedevcontainer.rebuildAndOpen",
+          "group": "remote_30_devcontainer_3remote@1",
+          "when": "remoteName == devcontainer"
+        },
+        {
+          "command": "openremotedevcontainer.rebuildNoCacheAndOpen",
+          "group": "remote_30_devcontainer_3remote@2",
+          "when": "remoteName == devcontainer"
         },
         {
           "command": "openremotedevcontainer.reopenLocally",
-          "group": "remote_30_devcontainer_3remote@1",
+          "group": "remote_30_devcontainer_3remote@3",
           "when": "remoteName == devcontainer"
         }
       ]
