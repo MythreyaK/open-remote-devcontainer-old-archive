@@ -50,7 +50,7 @@
       },
       {
         "command": "openremotedevcontainer.openFolderInDevcontainer",
-        "title": "Devcontainer: Open Folder in Devcontainer"
+        "title": "Devcontainer: Open Folder in container"
       },
       {
         "command": "openremotedevcontainer.showMenu",
@@ -62,7 +62,7 @@
       },
       {
         "command": "openremotedevcontainer.rebuildAndOpen",
-        "title": "Devcontainer: Rebuild & Open"
+        "title": "Devcontainer: Rebuild & repen in container"
       },
       {
         "command": "openremotedevcontainer.showLog",
@@ -166,17 +166,24 @@
     "package": "npm run build:prod",
     "vsce:package": "vsce package",
     "dts": "cd src/typings && npx @vscode/dts main && npx @vscode/dts dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
   },
   "dependencies": {
     "json5": "^2.2.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
     "@types/node": "^20.19.41",
     "@vscode/vsce": "^3.9.1",
     "esbuild": "^0.27.2",
     "npm-run-all": "^4.1.5",
     "ovsx": "^0.10.12",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.7"
   },
   "enabledApiProposals": [
     "resolvers",

@@ -536,6 +536,8 @@ export async function rebuildContainerDirect(
     "-d",
     "--name",
     containerName,
+    "--label", `devcontainer.local_folder=${resolved.wsFsPath}`,
+    "--label", `devcontainer.creator=${os.userInfo().username}`,
     "-e",
     `CODIUM_WS=/workspace/${projectName}`,
     "-p",
