@@ -40,6 +40,22 @@ export function activate(context: vscode.ExtensionContext) {
     await vscode.commands.executeCommand("setContext", "openremotedevcontainer.hasConfig", has);
   }
   updateDevcontainerContext();
+
+  if (!vscode.env.remoteName) {
+    const ws0 = getWorkspaceFolder();
+    if (ws0 && fs.existsSync(getDevcontainerPath(ws0.uri.fsPath))) {
+      vscode.window.showInformationMessage(
+        "Devcontainer configuration detected. Reopen in container?",
+        "Yes",
+        "No"
+      ).then((choice) => {
+        if (choice === "Yes") {
+          vscode.commands.executeCommand("openremotedevcontainer.openFolderInDevcontainer");
+        }
+      });
+    }
+  }
+
   const ws = getWorkspaceFolder();
   if (ws) {
     const watcher = vscode.workspace.createFileSystemWatcher(
@@ -47,12 +63,35 @@ export function activate(context: vscode.ExtensionContext) {
     );
     watcher.onDidCreate(async () => {
       await updateDevcontainerContext();
-      await runPostStartCommand();
+      if (!vscode.env.remoteName) {
+        const choice = await vscode.window.showInformationMessage(
+          "Devcontainer configuration found. Open folder in devcontainer?",
+          "Open in Devcontainer",
+          "No"
+        );
+        if (choice === "Open in Devcontainer") {
+          await vscode.commands.executeCommand("openremotedevcontainer.openFolderInDevcontainer");
+        }
+      } else {
+        await runPostStartCommand();
+      }
     });
     watcher.onDidDelete(updateDevcontainerContext);
     watcher.onDidChange(async () => {
       await updateDevcontainerContext();
-      await runPostStartCommand();
+      if (vscode.env.remoteName === REMOTE_DEVCONTAINER_AUTHORITY) {
+        const choice = await vscode.window.showInformationMessage(
+          "Devcontainer configuration changed. Rebuild container?",
+          "Rebuild",
+          "Rebuild without Cache",
+          "No"
+        );
+        if (choice === "Rebuild") {
+          await vscode.commands.executeCommand("openremotedevcontainer.rebuildAndOpen");
+        } else if (choice === "Rebuild without Cache") {
+          await vscode.commands.executeCommand("openremotedevcontainer.rebuildNoCacheAndOpen");
+        }
+      }
     });
     context.subscriptions.push(watcher);
   }
@@ -98,7 +137,23 @@ export function activate(context: vscode.ExtensionContext) {
     return parseAuthoritySlug(ws.uri.authority);
   }
 
-  async function openFolderViaResolver(forceRebuild: boolean): Promise<void> {
+  async function deferRebuildAndReopenLocally(forceRebuild: boolean, noCache: boolean): Promise<void> {
+    const slug = getRemoteSlug();
+    if (!slug) { throw new Error("Not connected to a devcontainer"); }
+    const localPath = context.globalState.get<string>(`localPath:${slug}`);
+    if (!localPath) { throw new Error(`No local path stored for workspace '${slug}'`); }
+    await context.globalState.update("pendingRebuild", { localPath, forceRebuild, noCache });
+    await vscode.commands.executeCommand(
+      "vscode.openFolder",
+      vscode.Uri.file(localPath),
+      { forceNewWindow: false }
+    );
+  }
+
+  async function openFolderViaResolver(forceRebuild: boolean, noCache = false): Promise<void> {
+    if (getRemoteSlug()) {
+      return deferRebuildAndReopenLocally(forceRebuild, noCache);
+    }
     const wsFsPath = getWorkspaceFsPathOrThrow();
     const resolved = resolveDevcontainerContext(wsFsPath);
     const slug = makeWorkspaceSlug(wsFsPath);
@@ -127,7 +182,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!exists || needsRebuild) {
       const hostPort = await findFreePort();
       resolver.setForceRebuild(needsRebuild);
-      await rebuildContainerDirect(context, resolved, hostPort, SERVER_PORT);
+      await rebuildContainerDirect(context, resolved, hostPort, SERVER_PORT, noCache);
     } else {
       await ensureContainerStarted(resolved.containerName);
     }
@@ -204,6 +259,13 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  const rebuildNoCacheAndOpen = vscode.commands.registerCommand(
+    "openremotedevcontainer.rebuildNoCacheAndOpen",
+    withUiErrorHandling(async () => {
+      await openFolderViaResolver(true, true);
+    })
+  );
+
   const openDevcontainerConfig = vscode.commands.registerCommand(
     "openremotedevcontainer.openDevcontainerConfig",
     withUiErrorHandling(async () => {
@@ -264,7 +326,8 @@ export function activate(context: vscode.ExtensionContext) {
     "openremotedevcontainer.showMenu",
     async () => {
       const ws = getWorkspaceFolder();
-      const has = ws ? fs.existsSync(getDevcontainerPath(ws.uri.fsPath)) : false;
+      const isRemote = vscode.env.remoteName === REMOTE_DEVCONTAINER_AUTHORITY;
+      const has = isRemote || (ws ? fs.existsSync(getDevcontainerPath(ws.uri.fsPath)) : false);
       const runIfHasConfig = async (commandId: string, missingMessage: string) => {
         if (!has) {
           vscode.window.showInformationMessage(missingMessage);
@@ -282,6 +345,9 @@ export function activate(context: vscode.ExtensionContext) {
         has
           ? { label: "$(sync) Rebuild & repen in container", detail: "Force rebuild and recreate container" }
           : { label: "$(circle-slash) Rebuild & repen in container", description: "(requires .devcontainer/devcontainer.json)" },
+        has
+          ? { label: "$(trash) Rebuild without cache & reopen", detail: "Rebuild image from scratch (--no-cache) and recreate container" }
+          : { label: "$(circle-slash) Rebuild without cache & reopen", description: "(requires .devcontainer/devcontainer.json)" },
         { label: "$(output) Show Log", detail: "Open the devcontainer log file" },
         ...(vscode.env.remoteName
           ? [{ label: "$(close) Reopen Folder Locally", detail: "Close remote and reopen workspace locally" }]
@@ -307,6 +373,11 @@ export function activate(context: vscode.ExtensionContext) {
           "openremotedevcontainer.rebuildAndOpen",
           "Cannot rebuild: .devcontainer/devcontainer.json is missing."
         );
+      } else if (chosen.label.includes("Rebuild without cache")) {
+        await runIfHasConfig(
+          "openremotedevcontainer.rebuildNoCacheAndOpen",
+          "Cannot rebuild: .devcontainer/devcontainer.json is missing."
+        );
       } else if (chosen.label.includes("Show Log")) {
         await openLogFile();
       } else if (chosen.label.includes("Reopen Folder Locally")) {
@@ -326,10 +397,20 @@ export function activate(context: vscode.ExtensionContext) {
     openDevcontainerConfig,
     rebuildAndOpen,
     reopenLocally,
+    rebuildNoCacheAndOpen,
     showLog,
     showOutputLog,
     showMenu
   );
+
+  const pending = context.globalState.get<{ localPath: string; forceRebuild: boolean; noCache: boolean }>("pendingRebuild");
+  if (pending && !vscode.env.remoteName) {
+    context.globalState.update("pendingRebuild", undefined);
+    openFolderViaResolver(pending.forceRebuild, pending.noCache).catch((err) => {
+      getOutput().appendLine(`Pending rebuild failed: ${err?.message ?? err}`);
+    });
+  }
+
   runPostStartCommand();
 }
 

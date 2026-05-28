@@ -34,6 +34,8 @@ export class RemoteDevcontainerResolver
 {
   private labelFormatterDisposable: vscode.Disposable | undefined;
   private forceRebuild = false;
+  private hostPort: number | undefined;
+  private serverDataFolder: string | undefined;
 
   constructor(
     private readonly extensionContext: vscode.ExtensionContext
@@ -41,6 +43,12 @@ export class RemoteDevcontainerResolver
 
   setForceRebuild(value: boolean): void {
     this.forceRebuild = value;
+  }
+
+  showCandidatePort(_host: string, port: number, detail: string): Thenable<boolean> {
+    if (port === SERVER_PORT || port === this.hostPort) return Promise.resolve(false);
+    if (this.serverDataFolder && detail.includes(this.serverDataFolder)) return Promise.resolve(false);
+    return Promise.resolve(true);
   }
 
   resolve(
@@ -66,6 +74,7 @@ export class RemoteDevcontainerResolver
         try {
           progress.report({ message: "Installing server…" });
           const server = await installServer(containerName);
+          this.serverDataFolder = server.dataFolder;
 
           if (server.logFile) {
             await this.extensionContext.globalState.update(`serverLogFile:${slug}`, server.logFile);
@@ -73,6 +82,7 @@ export class RemoteDevcontainerResolver
 
           progress.report({ message: "Reading port mapping…" });
           const hostPort = await getMappedPort(containerName, SERVER_PORT);
+          this.hostPort = hostPort;
           out.appendLine(
             `Server listening on container port ${server.port}, mapped to localhost:${hostPort} (token: ${server.connectionToken.slice(0, 8)}…)`
           );

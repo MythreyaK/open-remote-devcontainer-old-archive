@@ -276,7 +276,8 @@ async function dockerBuildImage(
   imageName: string,
   baseImage: string,
   remoteUser?: string,
-  dockerfilePath?: string
+  dockerfilePath?: string,
+  noCache?: boolean
 ) {
   const dockerfileToUse = dockerfilePath || getTemplateDockerfilePath(ctx);
   const args = [
@@ -288,6 +289,9 @@ async function dockerBuildImage(
     "--build-arg",
     `BASE_IMAGE=${baseImage}`
   ];
+  if (noCache) {
+    args.push("--no-cache");
+  }
   if (remoteUser) {
     args.push("--build-arg", `USERNAME=${remoteUser}`);
   }
@@ -468,12 +472,13 @@ async function buildImageWithEntrypoint(
   imageName: string,
   baseImage: string,
   remoteUser?: string,
-  devcontainer?: DevcontainerConfig
+  devcontainer?: DevcontainerConfig,
+  noCache?: boolean
 ) {
   await stageEntrypointTemporarily(ctx, wsFsPath);
   const tempDockerfile = await createTemporaryDockerfile(ctx, wsFsPath, devcontainer);
   try {
-    await dockerBuildImage(ctx, wsFsPath, imageName, baseImage, remoteUser, tempDockerfile);
+    await dockerBuildImage(ctx, wsFsPath, imageName, baseImage, remoteUser, tempDockerfile, noCache);
   } finally {
     await cleanupEntrypointIfManaged(wsFsPath);
     if (tempDockerfile && fs.existsSync(tempDockerfile)) {
@@ -507,7 +512,8 @@ export async function rebuildContainerDirect(
   ctx: vscode.ExtensionContext,
   resolved: ResolvedDevcontainerContext,
   hostPort: number,
-  containerPort: number
+  containerPort: number,
+  noCache?: boolean
 ) {
   await buildImageWithEntrypoint(
     ctx,
@@ -515,7 +521,8 @@ export async function rebuildContainerDirect(
     resolved.imageName,
     resolved.baseImage,
     resolved.remoteUser,
-    resolved.devcontainer
+    resolved.devcontainer,
+    noCache
   );
 
   const containerName = resolved.containerName;

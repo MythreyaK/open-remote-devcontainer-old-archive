@@ -27,6 +27,7 @@ export interface ServerInstallResult {
   logFile: string;
   arch: string;
   platform: string;
+  dataFolder: string;
 }
 
 export interface ContainerRun {
@@ -105,6 +106,7 @@ export function extractServerResult(
     logFile: raw.logFile ?? "",
     arch: raw.arch ?? "",
     platform: raw.platform ?? "",
+    dataFolder: "",
   };
 }
 
@@ -169,7 +171,9 @@ export async function installServer(
     envVariables: [],
   };
 
-  return installServerInContainer(containerName, config, makeContainerExec());
+  const result = await installServerInContainer(containerName, config, makeContainerExec());
+  result.dataFolder = devcontainerFolder;
+  return result;
 }
 
 // Based on open-remote-ssh/src/serverSetup.ts (MIT, jeanp413)
