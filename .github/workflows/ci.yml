@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: node:22.22.3-bookworm-slim
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Install git
