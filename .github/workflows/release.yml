@@ -7,7 +7,9 @@ on:
 
 jobs:
   build-release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+    container:
+      image: node:22.22.3-bookworm-slim
 
     permissions:
       contents: read
@@ -19,22 +21,16 @@ jobs:
       vsce_flag:   ${{ steps.release_type.outputs.vsce_flag }}
 
     steps:
+      - name: Install git
+        run: |
+          apt-get update && apt-get install -y git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Log versions
-        run: |
-          node --version
-          node -e "console.log(process.versions.zlib)"
-
       - name: Install dependencies
-        run: npm ci
+        run: npm ci && npm run dts
 
       - name: Audit dependencies
         run: npm audit --audit-level=moderate
@@ -93,19 +89,20 @@ jobs:
   publish-release:
     needs: build-release
     runs-on: ubuntu-latest
+    container:
+      image: node:22.22.3-bookworm-slim
 
     permissions:
       contents: write
 
     steps:
+      - name: Install git
+        run: |
+          apt-get update && apt-get install -y git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci

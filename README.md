@@ -79,7 +79,7 @@ npm run lint         # lint check
 
 ### Reproducible builds
 
-To validate a release, checkout the commit and run
+To validate a release, use `node:22.22.3-bookworm-slim`, checkout the commit, and run
 
 ```shell
 $ SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) TZ=UTC   \
