@@ -21,6 +21,7 @@ export type ResolvedDevcontainerContext = {
   containerName: string;
   baseImage: string;
   remoteUser: string | undefined;
+  dockerfilePath: string | undefined;
 };
 
 export function getWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
@@ -33,6 +34,32 @@ export function getHomeDir(): string {
 
 export function getDevcontainerPath(wsFsPath: string): string {
   return path.join(wsFsPath, ".devcontainer", "devcontainer.json");
+}
+
+export function resolveDockerfilePath(
+  wsFsPath: string,
+  dockerFile: string | undefined
+): string | undefined {
+  if (!dockerFile) {
+    return undefined;
+  }
+
+  if (path.isAbsolute(dockerFile) && fs.existsSync(dockerFile)) {
+    return dockerFile;
+  }
+
+  const devcontainerDir = path.dirname(getDevcontainerPath(wsFsPath));
+  const devcontainerRelative = path.resolve(devcontainerDir, dockerFile);
+  if (fs.existsSync(devcontainerRelative)) {
+    return devcontainerRelative;
+  }
+
+  const workspaceRelative = path.resolve(wsFsPath, dockerFile);
+  if (fs.existsSync(workspaceRelative)) {
+    return workspaceRelative;
+  }
+
+  return undefined;
 }
 
 export function readDevcontainerConfig(wsFsPath: string): DevcontainerConfig {
@@ -186,6 +213,7 @@ export function resolveDevcontainerContext(wsFsPath: string): ResolvedDevcontain
     containerName: getContainerName(wsFsPath),
     baseImage: devcontainer.image || "node:22-bookworm",
     remoteUser: devcontainer.remoteUser,
+    dockerfilePath: resolveDockerfilePath(wsFsPath, devcontainer.dockerFile),
   };
 }
 
@@ -449,9 +477,10 @@ async function cleanupEntrypointIfManaged(wsPath: string) {
 async function createTemporaryDockerfile(
   ctx: vscode.ExtensionContext,
   wsFsPath: string,
-  devcontainer: DevcontainerConfig | undefined
+  devcontainer: DevcontainerConfig | undefined,
+  dockerfilePath?: string
 ): Promise<string> {
-  const templatePath = getTemplateDockerfilePath(ctx);
+  const templatePath = dockerfilePath ?? getTemplateDockerfilePath(ctx);
   const templateText = fs.readFileSync(templatePath, "utf-8");
   const post = devcontainer?.postCreateCommand;
   const marker = "# Added by openremotedevcontainer (temp): postCreateCommand";
@@ -473,10 +502,16 @@ async function buildImageWithEntrypoint(
   baseImage: string,
   remoteUser?: string,
   devcontainer?: DevcontainerConfig,
+  dockerfilePath?: string,
   noCache?: boolean
 ) {
   await stageEntrypointTemporarily(ctx, wsFsPath);
-  const tempDockerfile = await createTemporaryDockerfile(ctx, wsFsPath, devcontainer);
+  const tempDockerfile = await createTemporaryDockerfile(
+    ctx,
+    wsFsPath,
+    devcontainer,
+    dockerfilePath
+  );
   try {
     await dockerBuildImage(ctx, wsFsPath, imageName, baseImage, remoteUser, tempDockerfile, noCache);
   } finally {
@@ -498,7 +533,8 @@ export async function rebuildContainer(
     resolved.imageName,
     resolved.baseImage,
     resolved.remoteUser,
-    resolved.devcontainer
+    resolved.devcontainer,
+    resolved.dockerfilePath
   );
   await dockerRestartContainer(
     resolved.imageName,
@@ -522,6 +558,7 @@ export async function rebuildContainerDirect(
     resolved.baseImage,
     resolved.remoteUser,
     resolved.devcontainer,
+    resolved.dockerfilePath,
     noCache
   );
 
