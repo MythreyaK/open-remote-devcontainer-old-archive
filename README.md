@@ -1,8 +1,14 @@
+> [!Warning]
+> Deprecated. Development now in https://github.com/MythreyaK/open-remote-devcontainer  
+>
+> 0.6.0+ releases are in the new repo.
+> This repo will be archived once the 0.7.0 pre-release and the 0.6.0 releases are published from the new repo. 
+
 # Open Remote - Devcontainer
 
-Pre-0.5.0, the extension relied on an SSH server inside the container via [open-remote-ssh](https://github.com/jeanp413/open-remote-ssh) by [@jeanp413](https://github.com/jeanp413).
+Pre-0.4.0, the extension relied on an SSH server inside the container via [open-remote-ssh](https://github.com/jeanp413/open-remote-ssh) by [@jeanp413](https://github.com/jeanp413).
 
-From `0.5.0` onwards, the VS Code proposed resolver API is used and must be enabled in `argv.json`.
+From `0.4.0` onwards, the VS Code proposed resolver API is used and must be enabled in `argv.json`.
 
 ## How it works
 
