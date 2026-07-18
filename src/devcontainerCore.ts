@@ -206,14 +206,34 @@ export function resolveDevcontainerContext(wsFsPath: string): ResolvedDevcontain
     containerWorkspaceFolder: `/workspace/${projectName}`,
   };
   const devcontainer = expandConfigVariables(rawConfig, varCtx);
+
+  if (devcontainer.image && devcontainer.dockerFile) {
+    throw new Error(
+      'devcontainer.json: "image" and "dockerFile" are mutually exclusive.'
+    );
+  }
+
+  const dockerfilePath = resolveDockerfilePath(wsFsPath, devcontainer.dockerFile);
+  if (devcontainer.dockerFile && !dockerfilePath) {
+    throw new Error(
+      `devcontainer.json: could not resolve dockerFile "${devcontainer.dockerFile}".`
+    );
+  }
+
+  if (!devcontainer.image && !dockerfilePath) {
+    throw new Error(
+      'devcontainer.json: "image" or "dockerFile" must be specified.'
+    );
+  }
+
   return {
     wsFsPath,
     devcontainer,
     imageName: getImageName(wsFsPath),
     containerName: getContainerName(wsFsPath),
-    baseImage: devcontainer.image || "node:22-bookworm",
+    baseImage: devcontainer.image!,
     remoteUser: devcontainer.remoteUser,
-    dockerfilePath: resolveDockerfilePath(wsFsPath, devcontainer.dockerFile),
+    dockerfilePath,
   };
 }
 
